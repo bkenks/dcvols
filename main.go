@@ -128,15 +128,16 @@ func processComposeFile(composePath string, uid, gid int, dryRun bool) error {
 			fmt.Printf("  (dry-run) %s\n", dir)
 			continue
 		}
+		newRoot := firstMissingAncestor(dir)
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("creating %s: %w", dir, err)
 		}
 		fmt.Printf("  created %s\n", dir)
-		if uid >= 0 && gid >= 0 {
-			if err := os.Chown(dir, uid, gid); err != nil {
-				return fmt.Errorf("chown %s: %w", dir, err)
+		if uid >= 0 && gid >= 0 && newRoot != "" {
+			if err := chownTree(newRoot, uid, gid); err != nil {
+				return fmt.Errorf("chown %s: %w", newRoot, err)
 			}
-			fmt.Printf("  chowned %s to %d:%d\n", dir, uid, gid)
+			fmt.Printf("  chowned %s to %d:%d\n", newRoot, uid, gid)
 		}
 	}
 
@@ -166,6 +167,40 @@ func extractBindMountDirs(cf composeFile) []string {
 	}
 
 	return dirs
+}
+
+// firstMissingAncestor returns the topmost path component that does not yet exist,
+// so we know where to start chowning after MkdirAll creates the tree.
+func firstMissingAncestor(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return path
+	}
+	current := abs
+	result := ""
+	for {
+		if _, err := os.Stat(current); os.IsNotExist(err) {
+			result = current
+		} else {
+			break
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+		current = parent
+	}
+	return result
+}
+
+// chownTree recursively chowns all files and directories under root.
+func chownTree(root string, uid, gid int) error {
+	return filepath.WalkDir(root, func(path string, _ os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		return os.Chown(path, uid, gid)
+	})
 }
 
 // isBindMount returns true if the volume entry is a bind mount (has a host path)
