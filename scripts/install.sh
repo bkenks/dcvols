@@ -36,16 +36,16 @@ git clone --depth=1 "https://github.com/${REPO}.git" "$TMP_DIR/src" >/dev/null 2
 
 info "Building dcvols..."
 cd "$TMP_DIR/src"
-CGO_ENABLED=0 go build -o "$TMP_DIR/$BINARY_NAME" . 2>&1 || die "Build failed."
+CGO_ENABLED=0 go build -o "./$BINARY_NAME" . || die "Build failed."
 
 mkdir -p "$USER_INSTALL_DIR"
-cp "$TMP_DIR/$BINARY_NAME" "$USER_INSTALL_DIR/$BINARY_NAME"
+cp "$TMP_DIR/src/$BINARY_NAME" "$USER_INSTALL_DIR/$BINARY_NAME"
 chmod +x "$USER_INSTALL_DIR/$BINARY_NAME"
 info "Installed to $USER_INSTALL_DIR/$BINARY_NAME"
 
 if [ -n "$SYSTEM_INSTALL_DIR" ]; then
     $SUDO mkdir -p "$SYSTEM_INSTALL_DIR"
-    $SUDO cp "$TMP_DIR/$BINARY_NAME" "$SYSTEM_INSTALL_DIR/$BINARY_NAME"
+    $SUDO cp "$TMP_DIR/src/$BINARY_NAME" "$SYSTEM_INSTALL_DIR/$BINARY_NAME"
     $SUDO chmod +x "$SYSTEM_INSTALL_DIR/$BINARY_NAME"
     info "Installed to $SYSTEM_INSTALL_DIR/$BINARY_NAME"
 fi
