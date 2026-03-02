@@ -128,6 +128,10 @@ func processComposeFile(composePath string, uid, gid int, dryRun bool) error {
 			fmt.Printf("  (dry-run) %s\n", dir)
 			continue
 		}
+		if info, err := os.Stat(dir); err == nil && !info.IsDir() {
+			// already exists as a non-directory (socket, file, etc.) — skip
+			continue
+		}
 		newRoot := firstMissingAncestor(dir)
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("creating %s: %w", dir, err)
