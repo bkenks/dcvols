@@ -32,10 +32,10 @@ info "Cloning dcvols repository..."
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-git clone --depth=1 "https://github.com/${REPO}.git" "$TMP_DIR/dcvols" >/dev/null 2>&1
+git clone --depth=1 "https://github.com/${REPO}.git" "$TMP_DIR/src" >/dev/null 2>&1
 
 info "Building dcvols..."
-cd "$TMP_DIR/dcvols"
+cd "$TMP_DIR/src"
 CGO_ENABLED=0 go build -o "$TMP_DIR/$BINARY_NAME" . 2>&1 || die "Build failed."
 
 mkdir -p "$USER_INSTALL_DIR"
