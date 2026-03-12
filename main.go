@@ -23,7 +23,25 @@ type composeFile struct {
 }
 
 type service struct {
-	Volumes []string `yaml:"volumes"`
+	Volumes []volumeEntry `yaml:"volumes"`
+}
+
+// volumeEntry handles both the short form ("host:container") and the long form
+// (map with type/source/target keys).
+type volumeEntry struct {
+	raw    string // set when short-form string
+	Type   string `yaml:"type"`
+	Source string `yaml:"source"`
+	Target string `yaml:"target"`
+}
+
+func (v *volumeEntry) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		v.raw = value.Value
+		return nil
+	}
+	type alias volumeEntry
+	return value.Decode((*alias)(v))
 }
 
 func main() {
@@ -154,9 +172,18 @@ func extractBindMountDirs(cf composeFile) []string {
 
 	for _, svc := range cf.Services {
 		for _, vol := range svc.Volumes {
-			// volumes can be "host:container" or "host:container:options"
-			parts := strings.SplitN(vol, ":", 2)
-			hostPath := parts[0]
+			var hostPath string
+			if vol.raw != "" {
+				// Short form: "host:container" or "host:container:options"
+				parts := strings.SplitN(vol.raw, ":", 2)
+				hostPath = parts[0]
+			} else {
+				// Long form: only bind mounts have a host path
+				if vol.Type != "bind" {
+					continue
+				}
+				hostPath = vol.Source
+			}
 
 			if !isBindMount(hostPath) {
 				continue
