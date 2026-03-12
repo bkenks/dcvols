@@ -134,41 +134,80 @@ func processComposeFile(composePath string, uid, gid int, dryRun bool) error {
 		return fmt.Errorf("parsing yaml: %w", err)
 	}
 
-	dirs := extractBindMountDirs(cf)
-	if len(dirs) == 0 {
+	mounts := extractBindMounts(cf)
+	if len(mounts) == 0 {
 		fmt.Printf("%s: no bind mounts found\n", composePath)
 		return nil
 	}
 
 	fmt.Printf("%s:\n", composePath)
-	for _, dir := range dirs {
+	for _, m := range mounts {
 		if dryRun {
-			fmt.Printf("  (dry-run) %s\n", dir)
-			continue
-		}
-		if info, err := os.Stat(dir); err == nil && !info.IsDir() {
-			// already exists as a non-directory (socket, file, etc.) — skip
-			continue
-		}
-		newRoot := firstMissingAncestor(dir)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("creating %s: %w", dir, err)
-		}
-		fmt.Printf("  created %s\n", dir)
-		if uid >= 0 && gid >= 0 && newRoot != "" {
-			if err := chownTree(newRoot, uid, gid); err != nil {
-				return fmt.Errorf("chown %s: %w", newRoot, err)
+			kind := "dir"
+			if m.isFile {
+				kind = "file"
 			}
-			fmt.Printf("  chowned %s to %d:%d\n", newRoot, uid, gid)
+			fmt.Printf("  (dry-run) %s [%s]\n", m.path, kind)
+			continue
+		}
+		if m.isFile {
+			if err := ensureFile(m.path, uid, gid); err != nil {
+				return fmt.Errorf("creating %s: %w", m.path, err)
+			}
+		} else {
+			if info, err := os.Stat(m.path); err == nil && !info.IsDir() {
+				// already exists as a non-directory — skip
+				continue
+			}
+			newRoot := firstMissingAncestor(m.path)
+			if err := os.MkdirAll(m.path, 0755); err != nil {
+				return fmt.Errorf("creating %s: %w", m.path, err)
+			}
+			fmt.Printf("  created %s\n", m.path)
+			if uid >= 0 && gid >= 0 && newRoot != "" {
+				if err := chownTree(newRoot, uid, gid); err != nil {
+					return fmt.Errorf("chown %s: %w", newRoot, err)
+				}
+				fmt.Printf("  chowned %s to %d:%d\n", newRoot, uid, gid)
+			}
 		}
 	}
 
 	return nil
 }
 
-func extractBindMountDirs(cf composeFile) []string {
+func ensureFile(path string, uid, gid int) error {
+	if _, err := os.Stat(path); err == nil {
+		// already exists — skip
+		return nil
+	}
+	newRoot := firstMissingAncestor(path)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	f.Close()
+	fmt.Printf("  created %s\n", path)
+	if uid >= 0 && gid >= 0 && newRoot != "" {
+		if err := chownTree(newRoot, uid, gid); err != nil {
+			return fmt.Errorf("chown %s: %w", newRoot, err)
+		}
+		fmt.Printf("  chowned %s to %d:%d\n", newRoot, uid, gid)
+	}
+	return nil
+}
+
+type bindMount struct {
+	path   string
+	isFile bool
+}
+
+func extractBindMounts(cf composeFile) []bindMount {
 	seen := make(map[string]bool)
-	var dirs []string
+	var mounts []bindMount
 
 	for _, svc := range cf.Services {
 		for _, vol := range svc.Volumes {
@@ -192,12 +231,15 @@ func extractBindMountDirs(cf composeFile) []string {
 			hostPath = filepath.Clean(hostPath)
 			if !seen[hostPath] {
 				seen[hostPath] = true
-				dirs = append(dirs, hostPath)
+				mounts = append(mounts, bindMount{
+					path:   hostPath,
+					isFile: filepath.Ext(hostPath) != "",
+				})
 			}
 		}
 	}
 
-	return dirs
+	return mounts
 }
 
 // firstMissingAncestor returns the topmost path component that does not yet exist,
