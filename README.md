@@ -78,7 +78,7 @@ dcvols --dry-run
 
 1. Finds `compose.yaml`, `compose.yml`, `docker-compose.yaml`, or `docker-compose.yml`
 2. Loads `.env` files by walking up the directory tree to the repo root — deeper files take precedence, so app-level `.env` values override root-level ones
-3. Expands `${VAR}` references in volume paths using loaded env + shell environment
+3. Expands `${VAR}` references in volume paths, resolving each name from the shell environment first and the loaded `.env` files second (the same order Docker Compose uses)
 4. Filters to bind mounts only — named volumes (e.g. `pgdata`) are skipped
 5. `mkdir -p`s each host path, optionally followed by `chown`
 

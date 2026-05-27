@@ -19,23 +19,25 @@ import (
 // found — and reads a ".env" file from each level that has one. Directories
 // without a .env file are simply skipped.
 //
-// Precedence: the files are merged from the deepest directory up toward the
-// root, and each read overwrites keys from the previous one. Because the root is
-// read LAST, values defined at the repository root currently OVERRIDE values
-// defined in deeper, compose-adjacent .env files.
+// Precedence: the files are merged from the repository root down toward dir, and
+// each read overwrites keys from the previous one. Because the deepest
+// (compose-adjacent) directory is read LAST, its values WIN on conflict. This is
+// the "most specific wins" model: a root .env supplies shared defaults that a
+// stack-specific .env next to the compose file can override.
 //
-// This is the opposite of the precedence the project README and CLAUDE.md
-// describe ("deeper files take precedence"). The behavior is preserved as-is so
-// that splitting main.go into packages stays behavior-neutral; see the BUG note
-// below for the one-line fix.
+// Note that Docker Compose itself does not walk the tree — it reads a single
+// .env from the project directory. The walk-up is a dcvols convenience for
+// monorepos with a shared root .env; keeping the deepest file authoritative
+// preserves parity with Compose whenever the relevant variable is defined there.
+// The live shell environment still overrides everything here; see Expand.
 func Load(dir string) (map[string]string, error) {
 	env := make(map[string]string)
 
-	// dirs is ordered root-first; iterating from the end reads the deepest
-	// directory first and the root last, so root values win on conflict.
+	// dirs is ordered root-first; iterating forward reads the root .env first
+	// and the deepest .env last, so the deepest (most specific) values win.
 	dirs := ancestorsToRoot(dir)
-	for i := len(dirs) - 1; i >= 0; i-- {
-		envPath := filepath.Join(dirs[i], ".env")
+	for _, d := range dirs {
+		envPath := filepath.Join(d, ".env")
 		if _, err := os.Stat(envPath); err != nil {
 			continue
 		}
@@ -51,23 +53,22 @@ func Load(dir string) (map[string]string, error) {
 	return env, nil
 }
 
-// BUG(envfile): Load merges root-level .env values LAST, so they override the
-// deeper, compose-adjacent .env files instead of the other way around. The
-// README and CLAUDE.md both state that deeper files should take precedence. To
-// match the documented intent, iterate dirs from index 0 (root) up to the
-// deepest directory — i.e. reverse the loop — so the deepest .env is read last
-// and wins on conflict.
-
 // Expand replaces $VAR and ${VAR} references in data, looking each name up first
-// in env and then, as a fallback, in the process environment via os.Getenv. A
-// name found in neither expands to the empty string, matching os.Expand (and
-// Docker Compose's own behavior for undefined variables).
+// in the process environment (os.LookupEnv) and then, as a fallback, in the
+// merged .env map. A name found in neither expands to the empty string, matching
+// os.Expand.
+//
+// Resolution order — shell environment over .env — mirrors Docker Compose, which
+// lets values from the shell or command line override those in a .env file.
+// LookupEnv (rather than Getenv) is used so that a variable explicitly set in
+// the shell wins even when set to the empty string, matching Compose's
+// set-versus-unset semantics.
 func Expand(data []byte, env map[string]string) []byte {
 	return []byte(os.Expand(string(data), func(key string) string {
-		if val, ok := env[key]; ok {
+		if val, ok := os.LookupEnv(key); ok {
 			return val
 		}
-		return os.Getenv(key)
+		return env[key]
 	}))
 }
 

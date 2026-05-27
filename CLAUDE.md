@@ -65,13 +65,25 @@ dcvols [flags] [path]
   --dry-run   Preview without creating
 ```
 
+## Variable precedence
+
+dcvols resolves `${VAR}` references the way Docker Compose does, so it creates
+the same paths Compose will mount. Highest precedence wins:
+
+```
+shell environment  >  compose-dir .env  >  parent .env  >  …  >  root .env
+```
+
+- `envfile.Expand` prefers the live shell environment over the `.env` map
+  (matching Compose, where shell/CLI values override `.env`).
+- `envfile.Load` merges `.env` files root-first so the deepest, compose-adjacent
+  file wins ("most specific wins"). The walk-up to the git root is a dcvols
+  convenience for monorepos with a shared root `.env`; Compose itself reads only
+  the project-dir `.env`.
+
 ## Notes
 
 - No tests or linter configuration exist in this repo.
 - The compiled binary is gitignored; do not commit it.
-- **Known bug (`.env` precedence):** `envfile.Load` currently merges root-level
-  `.env` values *last*, so they override deeper, compose-adjacent `.env` files —
-  the opposite of what the README and "How It Works" describe ("deeper files
-  take precedence"). The fix is one line (reverse the merge loop); see the
-  `BUG(envfile)` note in `internal/envfile/envfile.go`. Left as-is for now so the
-  package split stayed behavior-neutral.
+- `~`-prefixed bind paths (e.g. `~/data`) are detected as bind mounts but **not**
+  tilde-expanded, so dcvols would create a literal `~` directory. Known gap.
