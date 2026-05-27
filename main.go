@@ -104,6 +104,14 @@ func processComposeFile(composePath string, cfg config) error {
 
 	fmt.Printf("%s:\n", composePath)
 	for _, m := range mounts {
+		// Resolve ~ to a home directory before printing or creating, so dry-run
+		// output and the real run agree on the final path.
+		resolved, err := fsops.ExpandTilde(m.Path)
+		if err != nil {
+			return fmt.Errorf("resolving %s: %w", m.Path, err)
+		}
+		m.Path = resolved
+
 		if cfg.dryRun {
 			fmt.Printf("  (dry-run) %s [%s]\n", m.Path, kind(m.IsFile))
 			continue

@@ -1,7 +1,7 @@
-// Package fsops performs the filesystem side effects dcvols exists for:
-// creating missing bind-mount directories and files, and optionally chowning
-// only the parts of the tree that were newly created (never pre-existing
-// parents).
+// Package fsops turns the bind-mount paths dcvols extracts into real files and
+// directories on disk. It resolves home-relative (~) paths, creates missing
+// directories and files, and optionally chowns only the parts of the tree that
+// were newly created — never pre-existing parents.
 package fsops
 
 import (

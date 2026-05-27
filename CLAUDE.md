@@ -85,5 +85,6 @@ shell environment  >  compose-dir .env  >  parent .env  >  …  >  root .env
 
 - No tests or linter configuration exist in this repo.
 - The compiled binary is gitignored; do not commit it.
-- `~`-prefixed bind paths (e.g. `~/data`) are detected as bind mounts but **not**
-  tilde-expanded, so dcvols would create a literal `~` directory. Known gap.
+- `~`-prefixed bind paths (`~/data`, `~user/data`) are expanded to the home
+  directory by `fsops.ExpandTilde` before creation — a deliberate convenience
+  beyond what Compose itself does (Compose leaves `~` literal).
